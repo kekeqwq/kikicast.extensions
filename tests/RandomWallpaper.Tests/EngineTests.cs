@@ -24,7 +24,7 @@ public partial class EngineTests
         private int verifications;
         public ImageIdentity Inspect(string path)
         { Inspections.Add(path); if (Rejected.Contains(path)) throw new NotSupportedException("Generated decoder refusal"); return Identities.GetValueOrDefault(path) ?? new(path, 1, 2, path, path, path); }
-        public bool VerifySystemImage(string pixels, bool desktop, bool lockScreen) => ++verifications % 2 == 1 ? Current : ReplacementVerified;
+        public bool VerifySystemImage(ImageIdentity image, bool desktop, bool lockScreen) => ++verifications % 2 == 1 ? Current : ReplacementVerified;
         public Task<bool> ApplyDesktopAsync(string path) { Calls.Add("desktop:" + path); return Task.FromResult(Desktop); }
         public Task<bool> ApplyLockScreenAsync(string path) { Calls.Add("lock:" + path); return Task.FromResult(Lock); }
         public Task<bool> RecycleAsync(string path) { Calls.Add("recycle:" + path); return Task.FromResult(Recycle); }

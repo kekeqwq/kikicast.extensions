@@ -29,21 +29,11 @@ public sealed class WindowsWallpaper : IWallpaper
         var converted = new FormatConvertedBitmap(frame, PixelFormats.Bgra32, null, 0); var pixels = new byte[checked(frame.PixelWidth * frame.PixelHeight * 4)]; converted.CopyPixels(pixels, frame.PixelWidth * 4, 0);
         return frame.PixelWidth + "x" + frame.PixelHeight + ":" + Convert.ToHexStringLower(SHA256.HashData(pixels));
     }
-    public bool VerifySystemImage(string pixels, bool desktop, bool lockScreen)
+    public bool VerifySystemImage(ImageIdentity image, bool desktop, bool lockScreen) => WallpaperImageVerification.Verify(image, desktop, lockScreen, ReadDesktopPath, () => LockScreen.OriginalImageFile, Inspect);
+    private static string? ReadDesktopPath()
     {
-        if (!desktop && !lockScreen) return false;
-        try
-        {
-            if (desktop)
-            {
-                var buffer = new System.Text.StringBuilder(260);
-                if (!GetWallpaper(0x0073, 260, buffer, 0) || !LocalFiles.SafeFile(buffer.ToString())) return false;
-                using var file = File.OpenRead(buffer.ToString()); if (file.Length > 32L * 1024 * 1024 || PixelHash(file) != pixels) return false;
-            }
-            if (lockScreen) { using var stream = LockScreen.GetImageStream().AsStreamForRead(); if (stream.Length > 32L * 1024 * 1024 || PixelHash(stream) != pixels) return false; }
-            return true;
-        }
-        catch { return false; }
+        var buffer = new System.Text.StringBuilder(260);
+        return GetWallpaper(0x0073, 260, buffer, 0) ? buffer.ToString() : null;
     }
     public Task<bool> ApplyDesktopAsync(string path) => Task.FromResult(LocalFiles.SafeFile(path) && SetWallpaper(20, 0, path, 3));
     public async Task<bool> ApplyLockScreenAsync(string path)

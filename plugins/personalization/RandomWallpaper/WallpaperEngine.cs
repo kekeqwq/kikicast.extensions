@@ -19,7 +19,7 @@ public sealed record WallpaperState
 public interface IWallpaper
 {
     ImageIdentity Inspect(string path);
-    bool VerifySystemImage(string pixels, bool desktop, bool lockScreen);
+    bool VerifySystemImage(ImageIdentity image, bool desktop, bool lockScreen);
     Task<bool> ApplyDesktopAsync(string path);
     Task<bool> ApplyLockScreenAsync(string path);
     Task<bool> RecycleAsync(string path);
@@ -46,7 +46,7 @@ public sealed class WallpaperEngine(IWallpaper windows)
         if (state.Pending != null) return new(false, "An interrupted native operation is pending. No source is recycled; inspect/reset extension state manually.");
         var deleting = request.CommandId == "delete-now";
         var old = state.Current;
-        if (deleting && (old == null || !SameIdentity(windows.Inspect(old.Path), old) || !windows.VerifySystemImage(old.Pixels, state.DesktopSource == old.Path, state.LockSource == old.Path)))
+        if (deleting && (old == null || !SameIdentity(windows.Inspect(old.Path), old) || !windows.VerifySystemImage(old, state.DesktopSource == old.Path, state.LockSource == old.Path)))
             return new(false, "Current source/Windows wallpaper no longer matches the recorded image; not changed or recycled.");
         var folder = deleting ? config.Folders.FirstOrDefault(f => f.Enabled && f.Id == state.CurrentFolderId && LocalFiles.SafeDirectory(LocalFiles.Expand(f.Path)) && old != null && Path.GetDirectoryName(old.Path)!.Equals(Path.GetFullPath(LocalFiles.Expand(f.Path)), StringComparison.OrdinalIgnoreCase))
             : config.Folders.SingleOrDefault(f => f.Id == request.FolderId && f.Enabled);
@@ -98,7 +98,7 @@ public sealed class WallpaperEngine(IWallpaper windows)
             LastResult = $"Desktop: {(desktop ? desktopOk ? "set" : "failed" : "off")}; Lock screen: {(lockScreen ? lockOk ? "set" : "failed" : "off")}." };
         LocalFiles.Save(path, updated); // Failure leaves the on-disk pending record; never claims atomic success.
         if (!deleting) return new(changed && (!desktop || desktopOk) && (!lockScreen || lockOk), updated.LastResult);
-        if (!changed || updated.DesktopSource == old!.Path || updated.LockSource == old.Path || !windows.VerifySystemImage(selected.Pixels, desktop, lockScreen) || !SameIdentity(windows.Inspect(old.Path), old))
+        if (!changed || updated.DesktopSource == old!.Path || updated.LockSource == old.Path || !windows.VerifySystemImage(selected, desktop, lockScreen) || !SameIdentity(windows.Inspect(old.Path), old))
             return new(false, updated.LastResult + " Prior source not recycled: replacement was incomplete/unverified, still referenced, or source identity changed.");
         bool recycled = false; try { recycled = await windows.RecycleAsync(old.Path); } catch { }
         updated = updated with { LastResult = updated.LastResult + (recycled ? " Prior source sent to Recycle Bin." : " Recycle failed; prior source retained, replacement remains set.") }; LocalFiles.Save(path, updated);
