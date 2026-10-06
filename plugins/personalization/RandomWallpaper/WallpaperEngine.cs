@@ -50,33 +50,43 @@ public sealed class WallpaperEngine(IWallpaper windows)
             return new(false, "Current source/Windows wallpaper no longer matches the recorded image; not changed or recycled.");
         var folder = deleting ? config.Folders.FirstOrDefault(f => f.Enabled && f.Id == state.CurrentFolderId && LocalFiles.SafeDirectory(LocalFiles.Expand(f.Path)) && old != null && Path.GetDirectoryName(old.Path)!.Equals(Path.GetFullPath(LocalFiles.Expand(f.Path)), StringComparison.OrdinalIgnoreCase))
             : config.Folders.SingleOrDefault(f => f.Id == request.FolderId && f.Enabled);
-        if (folder == null) return new(false, "Current folder is unavailable/disabled. No fallback to a different folder.");
-        var directory = LocalFiles.Expand(folder.Path);
-        if (!LocalFiles.SafeDirectory(directory)) return new(false, "Choose an existing fixed-drive local folder without linked/remote ancestors.");
-        var candidates = new List<string>(); var inspected = 0;
-        foreach (var item in Directory.EnumerateFileSystemEntries(directory))
-        {
-            if (++inspected > 8192) return new(false, "Folder inspection budget exceeded; no partial random selection.");
-            if (Formats.Contains(Path.GetExtension(item)) && LocalFiles.SafeFile(item) && new FileInfo(item).Length <= 32L * 1024 * 1024) { candidates.Add(Path.GetFullPath(item)); if (candidates.Count > 2048) return new(false, "Image candidate budget exceeded; no partial selection."); }
-        }
+        if (folder == null) return new(false, "Current folder is unavailable/disabled or its definition changed; not changed or recycled.");
+        if (!LocalFiles.SafeDirectory(LocalFiles.Expand(folder.Path))) return new(false, "Choose an existing fixed-drive local folder without linked/remote ancestors.");
+        // Only DeleteNow may widen its search. Prefer the current UUID, then enabled
+        // configured folders in saved order; ordinary folder commands never fall back.
+        var searchFolders = deleting ? new[] { folder }.Concat(config.Folders.Where(f => f.Enabled && f.Id != folder.Id)).ToArray() : [folder];
         var excluded = new[] { state.Current?.Path, state.DesktopSource, state.LockSource }.Where(x => x != null).Select(x => x!).ToHashSet(StringComparer.OrdinalIgnoreCase);
-        ImageIdentity? selected = null; var bag = state.Bags.GetValueOrDefault(folder.Id); Selection selection = new(null, new([], []));
-        var invalid = 0;
-        while (candidates.Count > 0)
+        ImageIdentity? selected = null; Selection selection = new(null, new([], []));
+        var inspected = 0; var candidateCount = 0; var invalid = 0;
+        foreach (var searchFolder in searchFolders)
         {
-            selection = ShuffleBag.Select(candidates, bag, excluded, values => Random.Shared.Shuffle(values));
-            if (selection.Path == null) break;
-            try
+            var directory = LocalFiles.Expand(searchFolder.Path);
+            if (!LocalFiles.SafeDirectory(directory)) continue; // unavailable/linked/remote fallback folders are never traversed
+            var candidates = new List<string>();
+            foreach (var item in Directory.EnumerateFileSystemEntries(directory))
             {
-                selected = windows.Inspect(selection.Path);
-                if (state.Current?.Pixels == selected.Pixels || state.Current?.FileId == selected.FileId)
-                { candidates.RemoveAll(p => p.Equals(selection.Path, StringComparison.OrdinalIgnoreCase)); selected = null; continue; }
-                break;
+                if (++inspected > 8192) return new(false, "Shared folder inspection budget exceeded; no wallpaper changed or source recycled.");
+                if (Formats.Contains(Path.GetExtension(item)) && LocalFiles.SafeFile(item) && new FileInfo(item).Length <= 32L * 1024 * 1024)
+                { candidates.Add(Path.GetFullPath(item)); if (++candidateCount > 2048) return new(false, "Shared image candidate budget exceeded; no wallpaper changed or source recycled."); }
             }
-            catch (Exception ex) when (ex is IOException or ArgumentException or NotSupportedException or System.Runtime.InteropServices.COMException)
-            { candidates.RemoveAll(p => p.Equals(selection.Path, StringComparison.OrdinalIgnoreCase)); if (++invalid >= 64) return new(false, "Image decoder refusal budget exceeded; no wallpaper changed."); }
+            var bag = state.Bags.GetValueOrDefault(searchFolder.Id);
+            while (candidates.Count > 0)
+            {
+                selection = ShuffleBag.Select(candidates, bag, excluded, values => Random.Shared.Shuffle(values));
+                if (selection.Path == null) break;
+                try
+                {
+                    selected = windows.Inspect(selection.Path);
+                    if (state.Current?.Pixels == selected.Pixels || state.Current?.FileId == selected.FileId)
+                    { candidates.RemoveAll(p => p.Equals(selection.Path, StringComparison.OrdinalIgnoreCase)); selected = null; continue; }
+                    break;
+                }
+                catch (Exception ex) when (ex is IOException or ArgumentException or NotSupportedException or System.Runtime.InteropServices.COMException)
+                { candidates.RemoveAll(p => p.Equals(selection.Path, StringComparison.OrdinalIgnoreCase)); if (++invalid >= 64) return new(false, "Shared image decoder refusal budget exceeded; no wallpaper changed or source recycled."); }
+            }
+            if (selected != null) { folder = searchFolder; break; }
         }
-        if (selected == null) return new(false, candidates.Count == 0 ? "No valid supported image in this folder." : "No different image available; single/overlapping current candidates are not reused.");
+        if (selected == null) return new(false, deleting ? "No different valid image in any enabled configured folder; current source retained." : "No different valid image in this folder; folder commands do not fall back.");
         var bags = state.Bags.Where(x => config.Folders.Any(f => f.Id == x.Key)).ToDictionary(x => x.Key, x => x.Value with { Remaining = x.Value.Remaining.Where(p => !p.Equals(selected.Path, StringComparison.OrdinalIgnoreCase)).ToList() }); bags[folder.Id] = selection.State;
         // Persist reservation before any Windows write. If this fails, no wallpaper operation starts.
         LocalFiles.Save(path, state with { Bags = bags, Pending = selected, LastResult = "Native wallpaper operation pending; do not recycle." });

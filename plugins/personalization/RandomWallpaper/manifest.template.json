@@ -2,7 +2,7 @@
  "protocol": 1,
  "id": "random-wallpaper",
  "name": "RandomWallpaper",
- "version": "0.1.0-preview.1",
+ "version": "0.1.0-preview.2",
  "runtime": "REPLACED-BY-PACKAGER",
  "minimumHostVersion": "0.2.0",
  "executable": "RandomWallpaper.exe",

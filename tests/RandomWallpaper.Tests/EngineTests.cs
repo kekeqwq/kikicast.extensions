@@ -2,7 +2,7 @@ using Kikicast.ExtensionSdk;
 using Xunit;
 
 namespace RandomWallpaper.Tests;
-public class EngineTests
+public partial class EngineTests
 {
     [Fact] public void FullRoundAndBoundaryNeverRepeat()
     {
@@ -17,9 +17,13 @@ public class EngineTests
     private sealed class Fake : IWallpaper
     {
         public readonly List<string> Calls = [];
+        public readonly List<string> Inspections = [];
+        public readonly HashSet<string> Rejected = [];
+        public readonly Dictionary<string, ImageIdentity> Identities = [];
         public bool Desktop = true, Lock = true, Recycle = true, Current = true, ReplacementVerified = true;
         private int verifications;
-        public ImageIdentity Inspect(string path) => new(path, 1, 2, path, path, path);
+        public ImageIdentity Inspect(string path)
+        { Inspections.Add(path); if (Rejected.Contains(path)) throw new NotSupportedException("Generated decoder refusal"); return Identities.GetValueOrDefault(path) ?? new(path, 1, 2, path, path, path); }
         public bool VerifySystemImage(string pixels, bool desktop, bool lockScreen) => ++verifications % 2 == 1 ? Current : ReplacementVerified;
         public Task<bool> ApplyDesktopAsync(string path) { Calls.Add("desktop:" + path); return Task.FromResult(Desktop); }
         public Task<bool> ApplyLockScreenAsync(string path) { Calls.Add("lock:" + path); return Task.FromResult(Lock); }

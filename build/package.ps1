@@ -1,4 +1,4 @@
-param([string]$Version='0.1.0-preview.1', [string]$OutputDirectory, [switch]$RequireCleanSource)
+param([string]$Version='0.1.0-preview.2', [string]$OutputDirectory, [switch]$RequireCleanSource)
 $ErrorActionPreference='Stop'
 Set-StrictMode -Version Latest
 $repo=Split-Path $PSScriptRoot -Parent
