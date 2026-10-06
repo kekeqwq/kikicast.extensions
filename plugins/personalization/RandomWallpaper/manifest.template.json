@@ -1,0 +1,20 @@
+{
+ "protocol": 1,
+ "id": "random-wallpaper",
+ "name": "RandomWallpaper",
+ "version": "0.1.0-preview.1",
+ "runtime": "REPLACED-BY-PACKAGER",
+ "minimumHostVersion": "0.2.0",
+ "executable": "RandomWallpaper.exe",
+ "capabilities": ["desktop-wallpaper", "lock-screen", "local-images", "recycle-source"],
+ "hasFolders": true,
+ "booleans": [
+  {"key":"desktop","label":"Set desktop wallpaper","default":true},
+  {"key":"lock-screen","label":"Set Windows lock-screen image","default":true}
+ ],
+ "commands": [
+  {"id":"next","title":"Next","forEachFolder":true,"destructive":false},
+  {"id":"delete-now","title":"DeleteNow","forEachFolder":false,"destructive":true}
+ ],
+ "files": {}
+}
